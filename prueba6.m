@@ -1,167 +1,240 @@
-%% Códigos de práctica para algoritmos genéticos
+% Parámetros del problema (Antena)
+area_size = 100;
+r = 15; % radio de cobertura de cada antena
+n_antenas = 5;
 
-%% Métodos de selección
+% Generar puntos de usuarios aleatoriamente
+n_puntos = 300;
+puntos = rand(n_puntos, 2) * area_size;
 
-% Torneo
-function seleccionados = seleccionPorTorneo(poblacion, fitness, k)
-    len = size(poblacion, 1);
+% Parámetros GA
+tam_poblacion = 100;
+num_generaciones = 200;
+prob_cruce = 0.8;
+prob_mutacion = 0.2;
+
+% Cada individuo tiene 2 coordenadas por antena
+num_genes = n_antenas * 2;
+poblacion = rand(tam_poblacion, num_genes) * area_size;
+
+mejores = zeros(num_generaciones, 1);
+
+for gen = 1:num_generaciones
+    aptitudes = evaluarCobertura(poblacion, puntos, r);
+
+    % Guardar mejor
+    [mejores(gen), idx] = max(aptitudes);
+    elite = poblacion(idx,:);
+
+    % Selección
+    seleccionados = seleccionPorTorneo(poblacion, aptitudes, 5);
+
+    % Cruce
+    hijos = cruceDeUnPunto(seleccionados, prob_cruce);
+
+    % Mutación
+    mutados = mutacionGaussiana(hijos, prob_mutacion, 5, 0, area_size);
+
+    % Elitismo
+    mutados(1,:) = elite;
+    poblacion = mutados;
+end
+
+% Mostrar mejor
+[~, idx_final] = max(evaluarCobertura(poblacion, puntos, r));
+mejor = poblacion(idx_final, :);
+coords = reshape(mejor, 2, [])';
+
+% Gráfica de cobertura
+figure;
+scatter(puntos(:,1), puntos(:,2), 'k.');
+hold on;
+viscircles(coords, r * ones(n_antenas,1), 'Color','b');
+scatter(coords(:,1), coords(:,2), 100, 'r', 'filled');
+title('Ubicación de Antenas y Cobertura');
+axis([0 area_size 0 area_size]);
+grid on;
+
+% Convergencia
+figure;
+plot(1:num_generaciones, mejores, 'LineWidth', 2);
+xlabel('Generación');
+ylabel('Porcentaje de cobertura');
+title('Convergencia del algoritmo genético');
+grid on;
+
+% ============ FUNCIONES AUXILIARES =============
+
+function aptitudes = evaluarCobertura(poblacion, puntos, r)
+    [n, d] = size(poblacion);
+    n_antenas = d / 2;
+    aptitudes = zeros(n,1);
+
+    for i = 1:n
+        coords = reshape(poblacion(i,:), 2, [])';
+        cobertura = false(size(puntos,1), 1);
+
+        for j = 1:n_antenas
+            dist = sqrt(sum((puntos - coords(j,:)).^2, 2));
+            cobertura = cobertura | (dist <= r);
+        end
+
+        aptitudes(i) = sum(cobertura) / size(puntos,1); % fracción cubierta
+    end
+end
+
+function seleccionados = seleccionPorTorneo(poblacion, aptitudes, k)
+    n = size(poblacion, 1);
     seleccionados = zeros(size(poblacion));
-    
-    for i = 1:len
-        indices = randsample(len, k);
-        [~, best_idx] = max(fitness(indices));
-        seleccionados(i,:) = poblacion(indices(best_idx), :);
+    for i = 1:n
+        idx = randsample(n, k);
+        [~, best] = max(aptitudes(idx));
+        seleccionados(i,:) = poblacion(idx(best), :);
     end
 end
 
-% Ruleta
-
-function seleccionados = seleccionPorRuleta(poblacion, fitness)
-    len = size(poblacion, 1);
-    probs = fitness / sum(fitness);
-    indices_seleccionados = randsample(1:len, len, true, probs);
-    seleccionados = poblacion(indices_seleccionados, :);
-end
-
-% Ranking
-function seleccionados = seleccionPorRanking(poblacion, fitness)
-    len = size(poblacion, 1);
-    [~, orden] = sort(fitness, 'ascend');
-    rangos = 1:len;
-    probs = rangos / sum(rangos);
-    indices_seleccionados = randsample(orden, len, true, probs);
-    seleccionados = poblacion(indices_seleccionados, :); 
-end
-
-% Elite
-function seleccionados = seleccionPorElitismo(poblacion, fitness, num_seleccionados)
-    len = size(poblacion, 1);
-    [~, orden] = sort(fitness, 'descend');
-    indices_seleccionados = orden(1:num_seleccionados);
-    seleccionados = poblacion(indices_seleccionados, :);
-end
-
-%% Métodos de cruce
-
-% Cruce de un punto
-
-function hijos = cruceDeUnPunto(poblacion)
+function hijos = cruceDeUnPunto(poblacion, prob)
+    [n, d] = size(poblacion);
     hijos = zeros(size(poblacion));
-    len = size(poblacion, 1);
-
-    num_genes = size(poblacion, 2);
-
-    for i = 1:2:len
-        p1 = poblacion(i, :);
-        p2 = poblacion(i+1, :);
-        punto = randi([1 num_genes-1]);
-        hijos(i, :) = [p1(1:punto) p2(punto+1:end)];
-        hijos(i+1, :) = [p2(1:punto) p1(punto+1:end)];
-    end
-end
-
-% Cruce de dos puntos
-
-function hijos = cruceDeDosPuntos(poblacion)
-    len = size(poblacion, 1);
-    num_genes = size(poblacion,2);
-    
-    hijos = zeros(len, num_genes);
-
-    for i = 1:2:len
-        p1 = poblacion(i, :);
-        p2 = poblacion(i+1, :);
-
-        puntos = sort(randsample(1:num_genes-1, 2));
-        
-        hijos(i, :) = [p1(1:puntos(1)) p2(puntos(1)+1:puntos(2)) p1(puntos(2)+1:end)];
-        hijos(i+1, :) = [p2(1:puntos(1)) p1(puntos(1)+1:puntos(2)) p2(puntos(2)+1:end)];
-    end
-end
-
-% Cruce uniforme
-
-function hijos = cruceUniforme(poblacion, probabilidad)
-    [len, num_genes] = size(poblacion);
-    
-    hijos = zeros(len, num_genes);
-
-    for i = 1:2:len
-        p1 = poblacion(i, :);
-        p2 = poblacion(i+1, :);
-
-        mascara = rand(1, num_genes) < probabilidad;
-        
-        hijos(i, :) = p1;
-        hijos(i+1, :) = p2;
-
-        hijos(i, mascara) = p2(mascara);
-        hijos(i+1, mascara) = p1(mascara);
-    end
-end
-
-% Cruce aritmético
-
-function hijos = cruceAritmetico(seleccionados)
-    len = size(seleccionados, 1);
-    num_genes = size(seleccionados, 2);
-
-    hijos = zeros(len, num_genes);
-    
-    for i = 1:2:len
-        p1 = seleccionados(i, :);
-        p2 = seleccionados(i+1, :);
-
-        alfa = rand();
-
-        hijos(i, :) = alfa * p1 + (1-alfa) * p2;
-        hijos(i+1, :) = (1-alfa) * p1 + alfa * p2;
-    end
-end
-
-%% Métodos de mutación
-
-% Mutación flipBit
-function mutados = mutacionFlipBit(hijos, probabilidad)
-    [len, num_genes] = size(hijos);
-    mascara = rand(len, num_genes) < probabilidad;
-
-    mutados = hijos;
-    mutados(mascara) = 1 - mutados(mascara);
-end
-
-% Mutacion Uniforme
-function mutados = mutacionUniforme(hijos, probabilidad, rango_min, rango_max)
-    [len, num_genes] = size(hijos);
-
-    mascara = rand(len, num_genes) < probabilidad;
-
-    mutados = hijos;
-    alfa = rand(len, num_genes);
-    mutados(mascara) = rango_min + (rango_max - rango_min) * alfa(mascara);
-end
-
-% Mutación por intercambio
-function mutados = mutacionPorIntercambio(hijosm prob)
-    [len, num_genes] = size(hijos);
-
-    mutados = hijos; 
-    for i = 1:len
-        if rand() < prob
-            puntos = randsample(1:num_genes, 2);
-            temp = mutados(i, puntos(1));
-            mutados(i, puntos(1)) = mutados(i, puntos(2));
-            mutados(i, puntos(2)) = temp; 
+    for i = 1:2:n-1
+        p1 = poblacion(i,:);
+        p2 = poblacion(i+1,:);
+        if rand < prob
+            punto = randi([1 d-1]);
+            hijos(i,:) = [p1(1:punto), p2(punto+1:end)];
+            hijos(i+1,:) = [p2(1:punto), p1(punto+1:end)];
+        else
+            hijos(i,:) = p1;
+            hijos(i+1,:) = p2;
         end
     end
 end
 
-% Mutación Gaussiana
-function mutados = mutacionGaussiana(seleccionados, sigma, prob)
-    [len, num_genes] = size(seleccionados);
-    mask = rand(len, num_genes) < prob;
+function mutados = mutacionGaussiana(poblacion, prob, sigma, min_val, max_val)
+    [n, d] = size(poblacion);
+    mascara = rand(n, d) < prob;
+    ruido = sigma * randn(n, d);
+    mutados = poblacion;
+    mutados(mascara) = mutados(mascara) + ruido(mascara);
+    % Asegurar que se mantenga dentro del área
+    mutados = max(mutados, min_val);
+    mutados = min(mutados, max_val);
+end
 
-    mutados = seleccionados;
-    ruido = sigma * randn(len, num_genes);
-    mutados(mask) = mutados(mask) + ruido(mask);
+%% Parámetros del problema (Firewall)
+num_atributos = 10; % número de condiciones binarias por paquete
+num_reglas = 5;
+long_regla = num_atributos;
+long_individuo = num_reglas * long_regla;
+
+% Dataset ficticio: 500 paquetes
+n_paquetes = 500;
+X = randi([0 1], n_paquetes, num_atributos);
+Y = randi([0 1], n_paquetes, 1); % 1 = malicioso, 0 = benigno
+
+% Parámetros del GA
+
+tam_poblacion = 100;
+num_generaciones = 200;
+prob_cruce = 0.8;
+prob_mutacion = 0.02;
+
+poblacion = randi([0 1], tam_poblacion, long_individuo);
+mejores = zeros(num_generaciones, 1);
+
+for gen = 1:num_generaciones
+    aptitudes = evaluarFirewall(poblacion, X, Y, num_reglas, long_regla);
+    [mejores(gen), idx] = max(aptitudes);
+    elite = poblacion(idx, :);
+
+    % Selección por torneo
+    seleccionados = seleccionPorTorneo(poblacion, aptitudes, 5);
+
+    % Cruce de un punto
+    hijos = cruceDeUnPunto(seleccionados, prob_cruce);
+
+    % Mutación flip-bit
+    mutados = mutacionFlipBit(hijos, prob_mutacion);
+
+    % Elitismo
+    mutados(1,:) = elite;
+    poblacion = mutados;
+end
+
+% Mostrar resultados
+
+[~, idx_final] = max(evaluarFirewall(poblacion, X, Y, num_reglas, long_regla));
+mejor = poblacion(idx_final, :);
+fprintf("Mejor individuo:\n%s\n", mat2str(mejor));
+fprintf("Aptitud final: %.3f\n", mejores(end));
+
+figure;
+plot(1:num_generaciones, mejores, 'LineWidth', 2);
+xlabel('Generación');
+ylabel('Aptitud');
+title('Optimización de reglas de firewall');
+grid on;
+
+
+% Funciones auxiliares
+
+
+function aptitudes = evaluarFirewall(poblacion, X, Y, num_reglas, long_regla)
+    [n, d] = size(poblacion);
+    aptitudes = zeros(n, 1);
+    n_paquetes = size(X,1);
+    
+    for i = 1:n
+        reglas = reshape(poblacion(i,:), long_regla, [])';
+        TP = 0; FP = 0;
+
+        for j = 1:n_paquetes
+            pkt = X(j,:);
+            es_malicioso = Y(j);
+
+            match = any(all(reglas == pkt, 2)); % alguna regla coincide
+
+            if match && es_malicioso
+                TP = TP + 1;
+            elseif match && ~es_malicioso
+                FP = FP + 1;
+            end
+        end
+
+        aptitudes(i) = TP / (TP + FP + 1); % maximizamos
+    end
+end
+
+function hijos = cruceDeUnPunto(poblacion, prob)
+    [n, d] = size(poblacion);
+    hijos = zeros(size(poblacion));
+    for i = 1:2:n-1
+        p1 = poblacion(i,:);
+        p2 = poblacion(i+1,:);
+        if rand < prob
+            punto = randi([1 d-1]);
+            hijos(i,:) = [p1(1:punto), p2(punto+1:end)];
+            hijos(i+1,:) = [p2(1:punto), p1(punto+1:end)];
+        else
+            hijos(i,:) = p1;
+            hijos(i+1,:) = p2;
+        end
+    end
+end
+
+function mutados = mutacionFlipBit(poblacion, prob)
+    [n, d] = size(poblacion);
+    mascara = rand(n, d) < prob;
+    mutados = poblacion;
+    mutados(mascara) = 1 - mutados(mascara);
+end
+
+function seleccionados = seleccionPorTorneo(poblacion, aptitudes, k)
+    n = size(poblacion, 1);
+    seleccionados = zeros(size(poblacion));
+    for i = 1:n
+        idx = randsample(n, k);
+        [~, best] = max(aptitudes(idx));
+        seleccionados(i,:) = poblacion(idx(best), :);
+    end
 end
