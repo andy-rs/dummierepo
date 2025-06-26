@@ -37,10 +37,12 @@ end
 function seleccionados = seleccionPorElitismo(poblacion, fitness, num_seleccionados)
     len = size(poblacion, 1);
     [~, orden] = sort(fitness, 'descend');
-    indices_seleccionados = orden(1:num_seleccionados);
-    seleccionados = poblacion(indices_seleccionados, :);
+    elite = poblacion(orden(1:num_seleccionados), :);
+    restantes = len - num_seleccionados;
+    indices_extra = randsample(num_seleccionados, restantes, true);
+    relleno = elite(indices_extra, :);
+    seleccionados = [elite; relleno];
 end
-
 %% Métodos de cruce
 
 % Cruce de un punto
@@ -118,6 +120,49 @@ function hijos = cruceAritmetico(seleccionados)
         hijos(i+1, :) = (1-alfa) * p1 + alfa * p2;
     end
 end
+
+% Cruce OX
+function hijos = cruceOX(poblacion)
+    len = size(poblacion, 1);
+    num_genes = size(poblacion, 2);
+    hijos = zeros(len, num_genes);
+
+    for i = 1:2:len
+        p1 = poblacion(i, :);
+        p2 = poblacion(i+1, :);
+        puntos = sort(randsample(num_genes, 2));
+
+        c1 = zeros(1, num_genes);
+        c2 = zeros(1, num_genes);
+        c1(puntos(1):puntos(2)) = p1(puntos(1):puntos(2));
+        c2(puntos(1):puntos(2)) = p2(puntos(1):puntos(2));
+
+        idx1 = puntos(2) + 1;
+        idx2 = puntos(2) + 1;
+        fill_pos1 = mod(puntos(2), num_genes) + 1;
+        fill_pos2 = fill_pos1;
+
+        for k = 1:num_genes
+            g2 = p2(mod(idx1-1, num_genes) + 1);
+            if ~ismember(g2, c1)
+                c1(fill_pos1) = g2;
+                fill_pos1 = mod(fill_pos1, num_genes) + 1;
+            end
+            idx1 = idx1 + 1;
+
+            g1 = p1(mod(idx2-1, num_genes) + 1);
+            if ~ismember(g1, c2)
+                c2(fill_pos2) = g1;
+                fill_pos2 = mod(fill_pos2, num_genes) + 1;
+            end
+            idx2 = idx2 + 1;
+        end
+
+        hijos(i, :) = c1;
+        hijos(i+1, :) = c2;
+    end
+end
+
 
 %% Métodos de mutación
 
